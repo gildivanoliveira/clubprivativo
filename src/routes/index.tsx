@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 // 🔗 SUBSTITUA PELA URL DO SEU SITE / PLATAFORMA / WHATSAPP
-const CTA_URL = "coloque o url do seu site aqui";
+const CTA_URL = "https://www.clubeprivativo.com.br/#contato";
 
 export const Route = createFileRoute("/")({
   head: () => ({
