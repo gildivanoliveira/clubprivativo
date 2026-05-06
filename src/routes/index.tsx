@@ -32,7 +32,7 @@ function Index() {
   useEffect(() => {
     const timer = setTimeout(() => {
       window.location.href = CTA_URL;
-    }, 1500); // 1.2 segundos para dar tempo do robô do Meta ler a página
+    }, 1200); // 1.2 segundos para dar tempo do robô do Meta ler a página
 
     return () => clearTimeout(timer);
   }, []);
