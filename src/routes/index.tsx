@@ -16,6 +16,17 @@ function getOrCreateLeadId() {
   return leadId;
 }
 
+function getCookie(name: string) {
+  const safe = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = document.cookie.match(new RegExp(`(?:^|; )${safe}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
+function buildFbc(fbclid: string) {
+  if (!fbclid) return "";
+  return `fb.1.${Date.now()}.${fbclid}`;
+}
+
 function buildTelegramUrl(leadId: string) {
   const startPayload = `trk_${leadId}`;
   return `${TELEGRAM_BOT_URL}?start=${encodeURIComponent(startPayload)}`;
@@ -46,18 +57,47 @@ function Index() {
   useEffect(() => {
     const leadId = getOrCreateLeadId();
     const params = new URLSearchParams(window.location.search);
+    const fbclid = params.get("fbclid") || "";
+    const fbc = getCookie("_fbc") || buildFbc(fbclid);
+    const fbp = getCookie("_fbp") || "";
     const tracking = {
       leadId,
-      fbclid: params.get("fbclid") || "",
+      fbclid,
+      fbc,
+      fbp,
       utm_source: params.get("utm_source") || "",
       utm_medium: params.get("utm_medium") || "",
       utm_campaign: params.get("utm_campaign") || "",
       utm_content: params.get("utm_content") || "",
       utm_term: params.get("utm_term") || "",
+      event_source_url: window.location.href,
       ts: Date.now(),
     };
 
     window.localStorage.setItem("lead_tracking", JSON.stringify(tracking));
+
+    const postLeadPromise = fetch("/api/track-lead", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lead_id: tracking.leadId,
+        fbclid: tracking.fbclid,
+        fbc: tracking.fbc,
+        fbp: tracking.fbp,
+        utm_source: tracking.utm_source,
+        utm_medium: tracking.utm_medium,
+        utm_campaign: tracking.utm_campaign,
+        utm_content: tracking.utm_content,
+        utm_term: tracking.utm_term,
+        event_source_url: tracking.event_source_url,
+      }),
+      keepalive: true,
+    }).catch(() => null);
+
+    const postLeadWithTimeout = Promise.race([
+      postLeadPromise,
+      new Promise((resolve) => setTimeout(resolve, 700)),
+    ]);
 
     const fbq = window.fbq;
     if (typeof fbq === "function") {
@@ -70,6 +110,7 @@ function Index() {
       window.location.replace(redirectUrl);
     }, REDIRECT_DELAY_MS);
 
+    void postLeadWithTimeout;
     return () => clearTimeout(timer);
   }, []);
 
