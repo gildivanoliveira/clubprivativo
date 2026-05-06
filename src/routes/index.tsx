@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 // 🔗 COLOQUE O LINK DO SEU TELEGRAM AQUI
-const CTA_URL = "https://www.clubeprivativo.com.br/";
+const CTA_URL = "https://t.me/jkpinturasautomotivas/start";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -32,7 +32,7 @@ function Index() {
   useEffect(() => {
     const timer = setTimeout(() => {
       window.location.href = CTA_URL;
-    }, 1200); // 1.2 segundos para dar tempo do robô do Meta ler a página
+    }, 1500); // 1.2 segundos para dar tempo do robô do Meta ler a página
 
     return () => clearTimeout(timer);
   }, []);
