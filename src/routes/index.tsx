@@ -6,13 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 const TELEGRAM_BOT_URL = "https://t.me/jkpinturasautomotivas";
+const TRACK_LEAD_URL = "https://api.clubeprivativo.com.br/api/track-lead";
+const BOT_ID = 5;
 const REDIRECT_DELAY_MS = 1200;
 
-function getOrCreateLeadId() {
-  const existing = window.localStorage.getItem("lead_id");
-  if (existing) return existing;
+function createLeadId() {
   const leadId = `ld_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  window.localStorage.setItem("lead_id", leadId);
   return leadId;
 }
 
@@ -55,7 +54,7 @@ function Index() {
   const CTA_URL = `${TELEGRAM_BOT_URL}?start=contato`;
 
   useEffect(() => {
-    const leadId = getOrCreateLeadId();
+    const leadId = createLeadId();
     const params = new URLSearchParams(window.location.search);
     const fbclid = params.get("fbclid") || "";
     const fbc = getCookie("_fbc") || buildFbc(fbclid);
@@ -74,12 +73,14 @@ function Index() {
       ts: Date.now(),
     };
 
+    window.localStorage.setItem("last_lead_id", leadId);
     window.localStorage.setItem("lead_tracking", JSON.stringify(tracking));
 
-    const postLeadPromise = fetch("/api/track-lead", {
+    const postLeadPromise = fetch(TRACK_LEAD_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        bot_id: BOT_ID,
         lead_id: tracking.leadId,
         fbclid: tracking.fbclid,
         fbc: tracking.fbc,
