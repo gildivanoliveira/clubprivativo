@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { BarChart3, Megaphone, Database, ArrowRight, Mail, Phone, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-// 🔗 SUBSTITUA PELA URL DO SEU SITE / PLATAFORMA / WHATSAPP
-const CTA_URL = "https://www.clubeprivativo.com.br/#contato";
+// 🔗 COLOQUE O LINK DO SEU TELEGRAM AQUI
+const CTA_URL = "https://t.me/jkpetmove";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -27,6 +28,16 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
+  // --- LÓGICA DO REDIRECIONAMENTO FANTASMA ---
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      window.location.href = CTA_URL;
+    }, 1200); // 1.2 segundos para dar tempo do robô do Meta ler a página
+
+    return () => clearTimeout(timer);
+  }, []);
+  // -------------------------------------------
+
   return (
     <div className="min-h-screen bg-background font-sans text-foreground">
       {/* Header */}
@@ -54,24 +65,20 @@ function Index() {
       >
         <div className="mx-auto max-w-5xl px-6 py-28 text-center md:py-36">
           <span className="inline-block rounded-full border border-white/20 bg-white/5 px-4 py-1 text-xs font-medium uppercase tracking-widest text-white/80">
-            Soluções Digitais & Dados
+            Acesso Exclusivo
           </span>
           <h1 className="mt-6 text-4xl font-bold leading-tight tracking-tight text-white md:text-6xl">
-            Decisões inteligentes começam<br className="hidden md:block" /> com os dados certos.
+            Validando seu acesso ao<br className="hidden md:block" /> Clube Privativo...
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-white/75">
-            Consultoria estratégica em análise de dados e marketing digital para empresas que querem
-            crescer com clareza, eficiência e resultado.
+            Você está sendo redirecionado para a nossa plataforma oficial em instantes.
+            Prepare-se para o conteúdo exclusivo.
           </p>
 
           <div className="mt-10 flex justify-center">
-            <a
-              href={CTA_URL}
-              className="group inline-flex items-center gap-3 rounded-full bg-white px-8 py-4 text-base font-semibold text-primary shadow-[var(--shadow-elegant)] transition hover:scale-[1.03] hover:bg-white/95"
-            >
-              Acessar Plataforma
-              <ArrowRight className="h-5 w-5 transition group-hover:translate-x-1" />
-            </a>
+            <div className="flex items-center gap-3 rounded-full bg-white/10 px-8 py-4 text-base font-semibold text-white backdrop-blur">
+              Carregando conteúdo...
+            </div>
           </div>
         </div>
       </section>
