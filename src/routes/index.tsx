@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 // 🔗 COLOQUE O LINK DO SEU TELEGRAM AQUI
-const CTA_URL = "https://t.me/jkpetmove";
+const CTA_URL = "https://www.clubeprivativo.com.br/";
 
 export const Route = createFileRoute("/")({
   head: () => ({
