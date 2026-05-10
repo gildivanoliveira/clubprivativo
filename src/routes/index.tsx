@@ -7,8 +7,23 @@ import { Textarea } from "@/components/ui/textarea";
 
 const TELEGRAM_BOT_URL = "https://t.me/jkpinturasautomotivas";
 const TRACK_LEAD_URL = "https://api.clubeprivativo.com.br/api/track-lead";
+
+// META ADS PIXEL
+// Cole aqui somente o ID numerico do Pixel do Meta.
+// Exemplo: no codigo do Meta aparece fbq('init', '1311898797771813');
+// Nesse caso, cole apenas: 1311898797771813
+const META_PIXEL_ID = "1311898797771813";
+
+// ID do bot no painel. Troque quando este site apontar para outro bot.
 const BOT_ID = 5;
 const REDIRECT_DELAY_MS = 1200;
+
+declare global {
+  interface Window {
+    fbq?: (...args: unknown[]) => void;
+    _fbq?: (...args: unknown[]) => void;
+  }
+}
 
 function createLeadId() {
   const leadId = `ld_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -29,6 +44,34 @@ function buildFbc(fbclid: string) {
 function buildTelegramUrl(leadId: string) {
   const startPayload = `trk_${leadId}`;
   return `${TELEGRAM_BOT_URL}?start=${encodeURIComponent(startPayload)}`;
+}
+
+function loadMetaPixel(pixelId: string) {
+  if (!pixelId || window.fbq) return;
+
+  const fbq = (...args: unknown[]) => {
+    fbq.queue.push(args);
+  };
+
+  fbq.queue = [] as unknown[];
+  fbq.loaded = true;
+  fbq.version = "2.0";
+
+  window.fbq = fbq as unknown as (...args: unknown[]) => void;
+  window._fbq = window.fbq;
+
+  const script = document.createElement("script");
+  script.async = true;
+  script.src = "https://connect.facebook.net/en_US/fbevents.js";
+  const firstScript = document.getElementsByTagName("script")[0];
+  firstScript.parentNode?.insertBefore(script, firstScript);
+
+  window.fbq("init", pixelId);
+}
+
+function trackMetaEvent(eventName: string, payload: Record<string, unknown>, eventId: string) {
+  if (typeof window.fbq !== "function") return;
+  window.fbq("track", eventName, payload, { eventID: eventId });
 }
 
 export const Route = createFileRoute("/")({
@@ -55,6 +98,7 @@ function Index() {
 
   useEffect(() => {
     const leadId = createLeadId();
+    loadMetaPixel(META_PIXEL_ID);
     const params = new URLSearchParams(window.location.search);
     const fbclid = params.get("fbclid") || "";
     const fbc = getCookie("_fbc") || buildFbc(fbclid);
@@ -100,11 +144,26 @@ function Index() {
       new Promise((resolve) => setTimeout(resolve, 700)),
     ]);
 
-    const fbq = window.fbq;
-    if (typeof fbq === "function") {
-      fbq("track", "PageView");
-      fbq("track", "Lead", { lead_id: leadId, destination: "telegram" });
-    }
+    trackMetaEvent(
+      "PageView",
+      {
+        lead_id: leadId,
+        source: tracking.utm_source || "direct",
+        campaign: tracking.utm_campaign || "",
+      },
+      `pv_${leadId}`,
+    );
+    trackMetaEvent(
+      "Lead",
+      {
+        lead_id: leadId,
+        destination: "telegram",
+        source: tracking.utm_source || "direct",
+        campaign: tracking.utm_campaign || "",
+        content: tracking.utm_content || "",
+      },
+      leadId,
+    );
 
     const redirectUrl = buildTelegramUrl(leadId);
     const timer = setTimeout(() => {
