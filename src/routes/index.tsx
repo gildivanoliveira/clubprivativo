@@ -5,17 +5,32 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-const TELEGRAM_BOT_URL = "https://t.me/jkpinturasautomotivas";
-const TRACK_LEAD_URL = "https://api.clubeprivativo.com.br/api/track-lead";
+// ==========================================================
+// CONFIGURACAO RAPIDA DO SITE
+// Quando trocar de bot/campanha, normalmente voce so mexe aqui.
+// ==========================================================
 
-// META ADS PIXEL
+// 1) Link do bot que vai receber os leads do anuncio.
+// Troque somente o username depois de https://t.me/
+// Exemplo: https://t.me/Clarinhapvt_bot
+const TELEGRAM_BOT_URL = "https://t.me/Clarinhapvt_bot";
+
+// 2) ID do bot dentro do seu painel.
+// No painel, cada bot tem um ID. Clarinha = 6.
+// Se criar outro bot, troque este numero para o ID do bot novo.
+const BOT_ID = 6;
+
+// 3) Pixel do Meta Ads.
 // Cole aqui somente o ID numerico do Pixel do Meta.
 // Exemplo: no codigo do Meta aparece fbq('init', '1311898797771813');
 // Nesse caso, cole apenas: 1311898797771813
 const META_PIXEL_ID = "1311898797771813";
 
-// ID do bot no painel. Troque quando este site apontar para outro bot.
-const BOT_ID = 5;
+// 4) API de tracking da sua VPS. Normalmente nao precisa mexer.
+const TRACK_LEAD_URL = "https://api.clubeprivativo.com.br/api/track-lead";
+
+// 5) Tempo antes de mandar para o Telegram.
+// 1200 = 1.2 segundos. Nao recomendo colocar 0.
 const REDIRECT_DELAY_MS = 1200;
 
 declare global {
