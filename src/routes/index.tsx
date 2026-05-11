@@ -1,4 +1,4 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { BarChart3, Megaphone, Database, ArrowRight, Mail, Phone, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -181,12 +181,24 @@ function Index() {
     );
 
     const redirectUrl = buildTelegramUrl(leadId);
-    const timer = setTimeout(() => {
-      window.location.replace(redirectUrl);
-    }, REDIRECT_DELAY_MS);
+    let cancelled = false;
 
-    void postLeadWithTimeout;
-    return () => clearTimeout(timer);
+    const redirectAfterTracking = async () => {
+      await Promise.all([
+        postLeadWithTimeout,
+        new Promise((resolve) => setTimeout(resolve, REDIRECT_DELAY_MS)),
+      ]);
+
+      if (!cancelled) {
+        window.location.replace(redirectUrl);
+      }
+    };
+
+    void redirectAfterTracking();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
