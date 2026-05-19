@@ -31,7 +31,7 @@ const TRACK_LEAD_URL = "https://api.clubeprivativo.com.br/api/track-lead";
 
 // 5) Tempo antes de mandar para o Telegram.
 // 1200 = 1.2 segundos. Nao recomendo colocar 0.
-const REDIRECT_DELAY_MS = 1200;
+const REDIRECT_DELAY_MS = 1500;
 
 declare global {
   interface Window {
@@ -59,6 +59,11 @@ function buildFbc(fbclid: string) {
 function buildTelegramUrl(leadId: string) {
   const startPayload = `trk_${leadId}`;
   return `${TELEGRAM_BOT_URL}?start=${encodeURIComponent(startPayload)}`;
+}
+
+function isMobileOrTablet() {
+  const ua = navigator.userAgent || navigator.vendor || "";
+  return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|tablet/i.test(ua);
 }
 
 function loadMetaPixel(pixelId: string) {
@@ -132,6 +137,20 @@ function Index() {
       ts: Date.now(),
     };
 
+    trackMetaEvent(
+      "PageView",
+      {
+        lead_id: leadId,
+        source: tracking.utm_source || "direct",
+        campaign: tracking.utm_campaign || "",
+      },
+      `pv_${leadId}`,
+    );
+
+    if (!isMobileOrTablet()) {
+      return;
+    }
+
     window.localStorage.setItem("last_lead_id", leadId);
     window.localStorage.setItem("lead_tracking", JSON.stringify(tracking));
 
@@ -159,15 +178,6 @@ function Index() {
       new Promise((resolve) => setTimeout(resolve, 700)),
     ]);
 
-    trackMetaEvent(
-      "PageView",
-      {
-        lead_id: leadId,
-        source: tracking.utm_source || "direct",
-        campaign: tracking.utm_campaign || "",
-      },
-      `pv_${leadId}`,
-    );
     trackMetaEvent(
       "Lead",
       {
