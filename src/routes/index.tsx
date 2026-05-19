@@ -117,6 +117,32 @@ function Index() {
   const CTA_URL = `${TELEGRAM_BOT_URL}?start=contato`;
 
   useEffect(() => {
+    const accessButton = document.getElementById("botao-acessar") as HTMLAnchorElement | null;
+    const isMobile = isMobileOrTablet();
+
+    if (accessButton) {
+      if (isMobile) {
+        // Mobile: mantem link externo.
+        accessButton.setAttribute("href", CTA_URL);
+
+        // Se clicar antes do redirecionamento automatico, aplica o mesmo delay de 1.5s.
+        const onMobileClick = (event: MouseEvent) => {
+          event.preventDefault();
+          window.setTimeout(() => {
+            window.location.href = CTA_URL;
+          }, REDIRECT_DELAY_MS);
+        };
+
+        accessButton.addEventListener("click", onMobileClick);
+
+        // Remove listener no cleanup do efeito.
+        (accessButton as HTMLAnchorElement & { __mobileClick__?: (e: MouseEvent) => void }).__mobileClick__ = onMobileClick;
+      } else {
+        // Desktop: altera para ancora interna institucional.
+        accessButton.setAttribute("href", "#contato");
+      }
+    }
+
     const leadId = createLeadId();
     loadMetaPixel(META_PIXEL_ID);
     const params = new URLSearchParams(window.location.search);
@@ -147,8 +173,15 @@ function Index() {
       `pv_${leadId}`,
     );
 
-    if (!isMobileOrTablet()) {
-      return;
+    if (!isMobile) {
+      return () => {
+        if (accessButton) {
+          const handler = (accessButton as HTMLAnchorElement & { __mobileClick__?: (e: MouseEvent) => void }).__mobileClick__;
+          if (handler) {
+            accessButton.removeEventListener("click", handler);
+          }
+        }
+      };
     }
 
     window.localStorage.setItem("last_lead_id", leadId);
@@ -208,6 +241,12 @@ function Index() {
 
     return () => {
       cancelled = true;
+      if (accessButton) {
+        const handler = (accessButton as HTMLAnchorElement & { __mobileClick__?: (e: MouseEvent) => void }).__mobileClick__;
+        if (handler) {
+          accessButton.removeEventListener("click", handler);
+        }
+      }
     };
   }, []);
 
@@ -224,7 +263,7 @@ function Index() {
             <a href="#contato" className="transition hover:text-primary">Contato</a>
           </nav>
           <Button asChild size="sm" variant="outline" className="hidden md:inline-flex">
-            <a href={CTA_URL}>Acessar</a>
+            <a id="botao-acessar" href={CTA_URL}>Acessar</a>
           </Button>
         </div>
       </header>
