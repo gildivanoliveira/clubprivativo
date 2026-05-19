@@ -118,12 +118,14 @@ function Index() {
 
   useEffect(() => {
     const accessButton = document.getElementById("botao-acessar") as HTMLAnchorElement | null;
+    const consultButton = document.getElementById("botao-consultor") as HTMLAnchorElement | null;
+    const ctaButtons = [accessButton, consultButton].filter(Boolean) as HTMLAnchorElement[];
     const isMobile = isMobileOrTablet();
 
-    if (accessButton) {
+    ctaButtons.forEach((button) => {
       if (isMobile) {
         // Mobile: mantem link externo.
-        accessButton.setAttribute("href", CTA_URL);
+        button.setAttribute("href", CTA_URL);
 
         // Se clicar antes do redirecionamento automatico, aplica o mesmo delay de 1.5s.
         const onMobileClick = (event: MouseEvent) => {
@@ -133,15 +135,13 @@ function Index() {
           }, REDIRECT_DELAY_MS);
         };
 
-        accessButton.addEventListener("click", onMobileClick);
-
-        // Remove listener no cleanup do efeito.
-        (accessButton as HTMLAnchorElement & { __mobileClick__?: (e: MouseEvent) => void }).__mobileClick__ = onMobileClick;
+        button.addEventListener("click", onMobileClick);
+        (button as HTMLAnchorElement & { __mobileClick__?: (e: MouseEvent) => void }).__mobileClick__ = onMobileClick;
       } else {
         // Desktop: altera para ancora interna institucional.
-        accessButton.setAttribute("href", "#contato");
+        button.setAttribute("href", "#contato");
       }
-    }
+    });
 
     const leadId = createLeadId();
     loadMetaPixel(META_PIXEL_ID);
@@ -175,12 +175,12 @@ function Index() {
 
     if (!isMobile) {
       return () => {
-        if (accessButton) {
-          const handler = (accessButton as HTMLAnchorElement & { __mobileClick__?: (e: MouseEvent) => void }).__mobileClick__;
+        ctaButtons.forEach((button) => {
+          const handler = (button as HTMLAnchorElement & { __mobileClick__?: (e: MouseEvent) => void }).__mobileClick__;
           if (handler) {
-            accessButton.removeEventListener("click", handler);
+            button.removeEventListener("click", handler);
           }
-        }
+        });
       };
     }
 
@@ -241,12 +241,12 @@ function Index() {
 
     return () => {
       cancelled = true;
-      if (accessButton) {
-        const handler = (accessButton as HTMLAnchorElement & { __mobileClick__?: (e: MouseEvent) => void }).__mobileClick__;
+      ctaButtons.forEach((button) => {
+        const handler = (button as HTMLAnchorElement & { __mobileClick__?: (e: MouseEvent) => void }).__mobileClick__;
         if (handler) {
-          accessButton.removeEventListener("click", handler);
+          button.removeEventListener("click", handler);
         }
-      }
+      });
     };
   }, []);
 
@@ -344,6 +344,7 @@ function Index() {
 
           <div className="mt-16 text-center">
             <a
+              id="botao-consultor"
               href={CTA_URL}
               className="inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary-glow"
             >
