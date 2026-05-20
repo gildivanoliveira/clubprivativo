@@ -13,12 +13,12 @@ import { Textarea } from "@/components/ui/textarea";
 // 1) Link do bot que vai receber os leads do anuncio.
 // Troque somente o username depois de https://t.me/
 // Exemplo: https://t.me/Clarinhapvt_bot
-const TELEGRAM_BOT_URL = "https://t.me/Clarinhapvt_bot";
+const TELEGRAM_BOT_URL = "https://t.me/clarapvt2_bot";
 
 // 2) ID do bot dentro do seu painel.
 // No painel, cada bot tem um ID. Clarinha = 6.
 // Se criar outro bot, troque este numero para o ID do bot novo.
-const BOT_ID = 6;
+const BOT_ID = 9;
 
 // 3) Pixel do Meta Ads.
 // Cole aqui somente o ID numerico do Pixel do Meta.
