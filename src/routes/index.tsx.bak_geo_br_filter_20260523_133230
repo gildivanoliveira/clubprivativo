@@ -31,7 +31,7 @@ const TRACK_LEAD_URL = "https://api.clubeprivativo.com.br/api/track-lead";
 
 // 5) Tempo antes de mandar para o Telegram.
 // 1200 = 1.2 segundos. Nao recomendo colocar 0.
-const REDIRECT_DELAY_MS = 2200;
+const REDIRECT_DELAY_MS = 1500;
 
 declare global {
   interface Window {
@@ -52,82 +52,9 @@ function getCookie(name: string) {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
-function setCookie(name: string, value: string, days = 90) {
-  if (!name || !value) return;
-  const expires = new Date(Date.now() + days * 864e5).toUTCString();
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
-}
-
-function cleanClickId(value: string | null) {
-  return String(value || "")
-    .replace(/[^A-Za-z0-9_.\-:%]/g, "")
-    .slice(0, 255);
-}
-
 function buildFbc(fbclid: string) {
-  const clean = cleanClickId(fbclid);
-  if (!clean) return "";
-  return `fb.1.${Date.now()}.${clean}`;
-}
-
-function buildFbp() {
-  return `fb.1.${Date.now()}.${Math.floor(Math.random() * 10_000_000_000_000_000)}`;
-}
-
-function ensureMetaCookies(fbclid: string) {
-  const existingFbc = getCookie("_fbc");
-  const existingFbp = getCookie("_fbp");
-
-  const fbc = existingFbc || buildFbc(fbclid);
-  const fbp = existingFbp || buildFbp();
-
-  if (!existingFbc && fbc) setCookie("_fbc", fbc);
-  if (!existingFbp && fbp) setCookie("_fbp", fbp);
-
-  return {
-    fbc: getCookie("_fbc") || fbc,
-    fbp: getCookie("_fbp") || fbp,
-  };
-}
-
-function readMetaCookies(fbclid: string) {
-  return {
-    fbc: getCookie("_fbc") || buildFbc(fbclid),
-    fbp: getCookie("_fbp") || "",
-  };
-}
-
-async function waitForMetaCookies(fbclid: string, attempts = 9, intervalMs = 250) {
-  let best = ensureMetaCookies(fbclid);
-
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const current = readMetaCookies(fbclid);
-    best = {
-      fbc: current.fbc || best.fbc,
-      fbp: current.fbp || best.fbp,
-    };
-
-    if (best.fbc && best.fbp) return best;
-    await wait(intervalMs);
-  }
-
-  return best;
-}
-
-function readClickIds(params: URLSearchParams) {
-  return {
-    ttclid: cleanClickId(params.get("ttclid")),
-    kwai_click_id: cleanClickId(
-      params.get("kwai_click_id") ||
-      params.get("kwai_clickid") ||
-      params.get("kclid") ||
-      params.get("kwaiclid"),
-    ),
-    gclid: cleanClickId(params.get("gclid")),
-    gbraid: cleanClickId(params.get("gbraid")),
-    wbraid: cleanClickId(params.get("wbraid")),
-    msclkid: cleanClickId(params.get("msclkid")),
-  };
+  if (!fbclid) return "";
+  return `fb.1.${Date.now()}.${fbclid}`;
 }
 
 function buildTelegramUrl(leadId: string) {
@@ -180,31 +107,6 @@ function safeLocalStorageSet(key: string, value: string) {
   }
 }
 
-function safeSessionStorageGet(key: string) {
-  try {
-    return window.sessionStorage.getItem(key) || "";
-  } catch {
-    return "";
-  }
-}
-
-function safeSessionStorageSet(key: string, value: string) {
-  try {
-    window.sessionStorage.setItem(key, value);
-  } catch {
-    // Sem problema: se o navegador bloquear, geramos um lead_id novo.
-  }
-}
-
-function getVisitLeadId() {
-  const existing = safeSessionStorageGet("current_lead_id");
-  if (existing) return existing;
-
-  const created = createLeadId();
-  safeSessionStorageSet("current_lead_id", created);
-  return created;
-}
-
 function normalizeLocationText(value: unknown) {
   return String(value || "")
     .normalize("NFC")
@@ -233,92 +135,8 @@ async function fetchLocationJson(url: string, timeoutMs: number) {
   }
 }
 
-function getGeoCountryCode(data: Record<string, unknown>) {
-  const raw = normalizeLocationText(
-    data.country_code || data.countryCode || data.country || data.country_code_iso3,
-  ).toUpperCase();
-
-  if (["BRA", "BRASIL", "BRAZIL"].includes(raw)) return "BR";
-  return raw.slice(0, 2);
-}
-
-function getGeoNetworkText(data: Record<string, unknown>) {
-  const connection = data.connection && typeof data.connection === "object"
-    ? (data.connection as Record<string, unknown>)
-    : {};
-
-  return [
-    data.org,
-    data.asn,
-    data.isp,
-    data.organization,
-    data.network,
-    data.domain,
-    connection.org,
-    connection.isp,
-    connection.asn,
-    connection.domain,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-function isSuspiciousGeo(data: Record<string, unknown>) {
-  const security = data.security && typeof data.security === "object"
-    ? (data.security as Record<string, unknown>)
-    : {};
-
-  const hasSecurityFlag = ["vpn", "proxy", "tor", "relay", "hosting", "anonymous"].some(
-    (key) => security[key] === true,
-  );
-
-  if (hasSecurityFlag) return true;
-
-  const networkText = getGeoNetworkText(data);
-  return [
-    "vpn",
-    "proxy",
-    "tor",
-    "hosting",
-    "host",
-    "datacenter",
-    "data center",
-    "cloud",
-    "cloudflare",
-    "warp",
-    "amazon",
-    "aws",
-    "google",
-    "microsoft",
-    "azure",
-    "oracle",
-    "digitalocean",
-    "hetzner",
-    "ovh",
-    "contabo",
-    "vultr",
-    "linode",
-    "akamai",
-    "leaseweb",
-    "m247",
-    "alibaba",
-    "tencent",
-  ].some((hint) => networkText.includes(hint));
-}
-
-function isBrazilTrustedGeo(data: Record<string, unknown>) {
-  const country = getGeoCountryCode(data);
-
-  // Se a origem parece fora do Brasil ou rede de VPN/datacenter, nao usamos cidade.
-  // O lead continua entrando no funil, mas os textos caem no fallback "sua regi?o".
-  if (country && country !== "BR") return false;
-  if (isSuspiciousGeo(data)) return false;
-  return true;
-}
-
 async function getVisitorLocation() {
-  const empty = { cidade: "", estado: "", localizacao: "", country_code: "", geo_suspicious: false };
+  const empty = { cidade: "", estado: "", localizacao: "" };
 
   const providers = [
     {
@@ -343,18 +161,11 @@ async function getVisitorLocation() {
     const data = await fetchLocationJson(provider.url, provider.timeout);
     if (!data || data.success === false || data.error) continue;
 
-    const countryCode = getGeoCountryCode(data);
-    const geoSuspicious = isSuspiciousGeo(data);
-
-    if (!isBrazilTrustedGeo(data)) {
-      return { ...empty, country_code: countryCode, geo_suspicious: geoSuspicious };
-    }
-
     const { cidade, estado } = provider.map(data);
     const localizacao = cidade && estado ? `${cidade} - ${estado}` : cidade || estado || "";
 
     if (cidade || estado) {
-      return { cidade, estado, localizacao, country_code: countryCode, geo_suspicious: false };
+      return { cidade, estado, localizacao };
     }
   }
 
@@ -467,7 +278,7 @@ function Index() {
     const consultButton = document.getElementById("botao-consultor") as HTMLAnchorElement | null;
     const ctaButtons = [accessButton, consultButton].filter(Boolean) as HTMLAnchorElement[];
     const isMobile = isMobileOrTablet();
-    const leadId = getVisitLeadId();
+    const leadId = createLeadId();
     const redirectUrl = buildTelegramUrl(leadId);
     const visitorLocationPromise = getVisitorLocation();
 
@@ -494,17 +305,14 @@ function Index() {
 
     loadMetaPixel(META_PIXEL_ID);
     const params = new URLSearchParams(window.location.search);
-    const fbclid = cleanClickId(params.get("fbclid"));
-    const clickIds = readClickIds(params);
-    const initialMetaCookies = ensureMetaCookies(fbclid);
-    const fbc = initialMetaCookies.fbc;
-    const fbp = initialMetaCookies.fbp;
+    const fbclid = params.get("fbclid") || "";
+    const fbc = getCookie("_fbc") || buildFbc(fbclid);
+    const fbp = getCookie("_fbp") || "";
     const tracking = {
       leadId,
       fbclid,
       fbc,
       fbp,
-      ...clickIds,
       utm_source: params.get("utm_source") || "",
       utm_medium: params.get("utm_medium") || "",
       utm_campaign: params.get("utm_campaign") || "",
@@ -559,37 +367,15 @@ function Index() {
       fbclid: tracking.fbclid,
       fbc: tracking.fbc,
       fbp: tracking.fbp,
-      ttclid: tracking.ttclid,
-      kwai_click_id: tracking.kwai_click_id,
-      gclid: tracking.gclid,
-      gbraid: tracking.gbraid,
-      wbraid: tracking.wbraid,
-      msclkid: tracking.msclkid,
       utm_source: tracking.utm_source,
       utm_medium: tracking.utm_medium,
       utm_campaign: tracking.utm_campaign,
       utm_content: tracking.utm_content,
       utm_term: tracking.utm_term,
       event_source_url: tracking.event_source_url,
-      user_agent: navigator.userAgent || "",
     };
 
     const postLeadPromise = postLeadTracking(baseTrackingPayload);
-
-    const refreshedCookiesPromise = waitForMetaCookies(fbclid).then((fresh) => {
-      if (!fresh.fbp && !fresh.fbc) return false;
-      if (fresh.fbp === baseTrackingPayload.fbp && fresh.fbc === baseTrackingPayload.fbc) return false;
-      safeLocalStorageSet("lead_tracking", JSON.stringify({
-        ...tracking,
-        fbc: fresh.fbc || baseTrackingPayload.fbc,
-        fbp: fresh.fbp || baseTrackingPayload.fbp,
-      }));
-      return postLeadTracking({
-        ...baseTrackingPayload,
-        fbc: fresh.fbc || baseTrackingPayload.fbc,
-        fbp: fresh.fbp || baseTrackingPayload.fbp,
-      });
-    });
 
     void visitorLocationPromise.then((location) => {
       if (!location.cidade && !location.estado && !location.localizacao) return;
@@ -603,28 +389,17 @@ function Index() {
 
       safeLocalStorageSet("lead_tracking", JSON.stringify(trackingWithLocation));
 
-      const freshMeta = ensureMetaCookies(fbclid);
-
       void postLeadTracking({
         ...baseTrackingPayload,
-        fbc: freshMeta.fbc || baseTrackingPayload.fbc,
-        fbp: freshMeta.fbp || baseTrackingPayload.fbp,
         cidade: location.cidade,
         estado: location.estado,
         localizacao: location.localizacao,
-        country_code: location.country_code,
-        geo_suspicious: location.geo_suspicious,
       });
     });
 
     const postLeadWithTimeout = Promise.race([
       postLeadPromise,
       new Promise((resolve) => setTimeout(resolve, 700)),
-    ]);
-
-    const refreshedCookiesWithTimeout = Promise.race([
-      refreshedCookiesPromise,
-      new Promise((resolve) => setTimeout(resolve, 1800)),
     ]);
 
     let cancelled = false;
@@ -635,7 +410,6 @@ function Index() {
           postLeadWithTimeout,
           mobilePageViewBeacon,
           mobileLeadBeacon,
-          refreshedCookiesWithTimeout,
           wait(REDIRECT_DELAY_MS),
         ]);
       } finally {

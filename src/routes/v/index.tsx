@@ -31,7 +31,7 @@ const TRACK_LEAD_URL = "https://api.clubeprivativo.com.br/api/track-lead";
 
 // 5) Tempo antes de mandar para o Telegram.
 // 1200 = 1.2 segundos. Nao recomendo colocar 0.
-const REDIRECT_DELAY_MS = 2200;
+const REDIRECT_DELAY_MS = 1500;
 
 declare global {
   interface Window {
@@ -52,81 +52,15 @@ function getCookie(name: string) {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
-function setCookie(name: string, value: string, days = 90) {
-  if (!name || !value) return;
-  const expires = new Date(Date.now() + days * 864e5).toUTCString();
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
-}
-
-function cleanClickId(value: string | null) {
-  return String(value || "")
-    .replace(/[^A-Za-z0-9_.\-:%]/g, "")
-    .slice(0, 255);
-}
-
 function buildFbc(fbclid: string) {
-  const clean = cleanClickId(fbclid);
-  if (!clean) return "";
-  return `fb.1.${Date.now()}.${clean}`;
-}
-
-function buildFbp() {
-  return `fb.1.${Date.now()}.${Math.floor(Math.random() * 10_000_000_000_000_000)}`;
-}
-
-function ensureMetaCookies(fbclid: string) {
-  const existingFbc = getCookie("_fbc");
-  const existingFbp = getCookie("_fbp");
-
-  const fbc = existingFbc || buildFbc(fbclid);
-  const fbp = existingFbp || buildFbp();
-
-  if (!existingFbc && fbc) setCookie("_fbc", fbc);
-  if (!existingFbp && fbp) setCookie("_fbp", fbp);
-
-  return {
-    fbc: getCookie("_fbc") || fbc,
-    fbp: getCookie("_fbp") || fbp,
-  };
+  if (!fbclid) return "";
+  return `fb.1.${Math.floor(Date.now() / 1000)}.${fbclid}`;
 }
 
 function readMetaCookies(fbclid: string) {
   return {
     fbc: getCookie("_fbc") || buildFbc(fbclid),
     fbp: getCookie("_fbp") || "",
-  };
-}
-
-async function waitForMetaCookies(fbclid: string, attempts = 9, intervalMs = 250) {
-  let best = ensureMetaCookies(fbclid);
-
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const current = readMetaCookies(fbclid);
-    best = {
-      fbc: current.fbc || best.fbc,
-      fbp: current.fbp || best.fbp,
-    };
-
-    if (best.fbc && best.fbp) return best;
-    await wait(intervalMs);
-  }
-
-  return best;
-}
-
-function readClickIds(params: URLSearchParams) {
-  return {
-    ttclid: cleanClickId(params.get("ttclid")),
-    kwai_click_id: cleanClickId(
-      params.get("kwai_click_id") ||
-      params.get("kwai_clickid") ||
-      params.get("kclid") ||
-      params.get("kwaiclid"),
-    ),
-    gclid: cleanClickId(params.get("gclid")),
-    gbraid: cleanClickId(params.get("gbraid")),
-    wbraid: cleanClickId(params.get("wbraid")),
-    msclkid: cleanClickId(params.get("msclkid")),
   };
 }
 
@@ -178,31 +112,6 @@ function safeLocalStorageSet(key: string, value: string) {
   } catch {
     // Safari/iOS pode bloquear storage em alguns contextos. Tracking nao pode travar o redirect.
   }
-}
-
-function safeSessionStorageGet(key: string) {
-  try {
-    return window.sessionStorage.getItem(key) || "";
-  } catch {
-    return "";
-  }
-}
-
-function safeSessionStorageSet(key: string, value: string) {
-  try {
-    window.sessionStorage.setItem(key, value);
-  } catch {
-    // Sem problema: se o navegador bloquear, geramos um lead_id novo.
-  }
-}
-
-function getVisitLeadId() {
-  const existing = safeSessionStorageGet("current_lead_id");
-  if (existing) return existing;
-
-  const created = createLeadId();
-  safeSessionStorageSet("current_lead_id", created);
-  return created;
 }
 
 function normalizeLocationText(value: unknown) {
@@ -467,7 +376,7 @@ function Index() {
     const consultButton = document.getElementById("botao-consultor") as HTMLAnchorElement | null;
     const ctaButtons = [accessButton, consultButton].filter(Boolean) as HTMLAnchorElement[];
     const isMobile = isMobileOrTablet();
-    const leadId = getVisitLeadId();
+    const leadId = createLeadId();
     const redirectUrl = buildTelegramUrl(leadId);
     const visitorLocationPromise = getVisitorLocation();
 
@@ -494,9 +403,8 @@ function Index() {
 
     loadMetaPixel(META_PIXEL_ID);
     const params = new URLSearchParams(window.location.search);
-    const fbclid = cleanClickId(params.get("fbclid"));
-    const clickIds = readClickIds(params);
-    const initialMetaCookies = ensureMetaCookies(fbclid);
+    const fbclid = params.get("fbclid") || "";
+    const initialMetaCookies = readMetaCookies(fbclid);
     const fbc = initialMetaCookies.fbc;
     const fbp = initialMetaCookies.fbp;
     const tracking = {
@@ -504,7 +412,6 @@ function Index() {
       fbclid,
       fbc,
       fbp,
-      ...clickIds,
       utm_source: params.get("utm_source") || "",
       utm_medium: params.get("utm_medium") || "",
       utm_campaign: params.get("utm_campaign") || "",
@@ -559,31 +466,20 @@ function Index() {
       fbclid: tracking.fbclid,
       fbc: tracking.fbc,
       fbp: tracking.fbp,
-      ttclid: tracking.ttclid,
-      kwai_click_id: tracking.kwai_click_id,
-      gclid: tracking.gclid,
-      gbraid: tracking.gbraid,
-      wbraid: tracking.wbraid,
-      msclkid: tracking.msclkid,
       utm_source: tracking.utm_source,
       utm_medium: tracking.utm_medium,
       utm_campaign: tracking.utm_campaign,
       utm_content: tracking.utm_content,
       utm_term: tracking.utm_term,
       event_source_url: tracking.event_source_url,
-      user_agent: navigator.userAgent || "",
     };
 
     const postLeadPromise = postLeadTracking(baseTrackingPayload);
 
-    const refreshedCookiesPromise = waitForMetaCookies(fbclid).then((fresh) => {
+    const refreshedCookiesPromise = wait(800).then(() => {
+      const fresh = readMetaCookies(fbclid);
       if (!fresh.fbp && !fresh.fbc) return false;
       if (fresh.fbp === baseTrackingPayload.fbp && fresh.fbc === baseTrackingPayload.fbc) return false;
-      safeLocalStorageSet("lead_tracking", JSON.stringify({
-        ...tracking,
-        fbc: fresh.fbc || baseTrackingPayload.fbc,
-        fbp: fresh.fbp || baseTrackingPayload.fbp,
-      }));
       return postLeadTracking({
         ...baseTrackingPayload,
         fbc: fresh.fbc || baseTrackingPayload.fbc,
@@ -603,7 +499,7 @@ function Index() {
 
       safeLocalStorageSet("lead_tracking", JSON.stringify(trackingWithLocation));
 
-      const freshMeta = ensureMetaCookies(fbclid);
+      const freshMeta = readMetaCookies(fbclid);
 
       void postLeadTracking({
         ...baseTrackingPayload,
@@ -624,7 +520,7 @@ function Index() {
 
     const refreshedCookiesWithTimeout = Promise.race([
       refreshedCookiesPromise,
-      new Promise((resolve) => setTimeout(resolve, 1800)),
+      new Promise((resolve) => setTimeout(resolve, 900)),
     ]);
 
     let cancelled = false;

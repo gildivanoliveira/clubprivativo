@@ -31,13 +31,12 @@ const TRACK_LEAD_URL = "https://api.clubeprivativo.com.br/api/track-lead";
 
 // 5) Tempo antes de mandar para o Telegram.
 // 1200 = 1.2 segundos. Nao recomendo colocar 0.
-const REDIRECT_DELAY_MS = 2200;
+const REDIRECT_DELAY_MS = 1500;
 
 declare global {
   interface Window {
     fbq?: (...args: unknown[]) => void;
     _fbq?: (...args: unknown[]) => void;
-    __pixelBeaconImages?: HTMLImageElement[];
   }
 }
 
@@ -52,82 +51,9 @@ function getCookie(name: string) {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
-function setCookie(name: string, value: string, days = 90) {
-  if (!name || !value) return;
-  const expires = new Date(Date.now() + days * 864e5).toUTCString();
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
-}
-
-function cleanClickId(value: string | null) {
-  return String(value || "")
-    .replace(/[^A-Za-z0-9_.\-:%]/g, "")
-    .slice(0, 255);
-}
-
 function buildFbc(fbclid: string) {
-  const clean = cleanClickId(fbclid);
-  if (!clean) return "";
-  return `fb.1.${Date.now()}.${clean}`;
-}
-
-function buildFbp() {
-  return `fb.1.${Date.now()}.${Math.floor(Math.random() * 10_000_000_000_000_000)}`;
-}
-
-function ensureMetaCookies(fbclid: string) {
-  const existingFbc = getCookie("_fbc");
-  const existingFbp = getCookie("_fbp");
-
-  const fbc = existingFbc || buildFbc(fbclid);
-  const fbp = existingFbp || buildFbp();
-
-  if (!existingFbc && fbc) setCookie("_fbc", fbc);
-  if (!existingFbp && fbp) setCookie("_fbp", fbp);
-
-  return {
-    fbc: getCookie("_fbc") || fbc,
-    fbp: getCookie("_fbp") || fbp,
-  };
-}
-
-function readMetaCookies(fbclid: string) {
-  return {
-    fbc: getCookie("_fbc") || buildFbc(fbclid),
-    fbp: getCookie("_fbp") || "",
-  };
-}
-
-async function waitForMetaCookies(fbclid: string, attempts = 9, intervalMs = 250) {
-  let best = ensureMetaCookies(fbclid);
-
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const current = readMetaCookies(fbclid);
-    best = {
-      fbc: current.fbc || best.fbc,
-      fbp: current.fbp || best.fbp,
-    };
-
-    if (best.fbc && best.fbp) return best;
-    await wait(intervalMs);
-  }
-
-  return best;
-}
-
-function readClickIds(params: URLSearchParams) {
-  return {
-    ttclid: cleanClickId(params.get("ttclid")),
-    kwai_click_id: cleanClickId(
-      params.get("kwai_click_id") ||
-      params.get("kwai_clickid") ||
-      params.get("kclid") ||
-      params.get("kwaiclid"),
-    ),
-    gclid: cleanClickId(params.get("gclid")),
-    gbraid: cleanClickId(params.get("gbraid")),
-    wbraid: cleanClickId(params.get("wbraid")),
-    msclkid: cleanClickId(params.get("msclkid")),
-  };
+  if (!fbclid) return "";
+  return `fb.1.${Date.now()}.${fbclid}`;
 }
 
 function buildTelegramUrl(leadId: string) {
@@ -168,278 +94,6 @@ function trackMetaEvent(eventName: string, payload: Record<string, unknown>, eve
   window.fbq("track", eventName, payload, { eventID: eventId });
 }
 
-function wait(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function safeLocalStorageSet(key: string, value: string) {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // Safari/iOS pode bloquear storage em alguns contextos. Tracking nao pode travar o redirect.
-  }
-}
-
-function safeSessionStorageGet(key: string) {
-  try {
-    return window.sessionStorage.getItem(key) || "";
-  } catch {
-    return "";
-  }
-}
-
-function safeSessionStorageSet(key: string, value: string) {
-  try {
-    window.sessionStorage.setItem(key, value);
-  } catch {
-    // Sem problema: se o navegador bloquear, geramos um lead_id novo.
-  }
-}
-
-function getVisitLeadId() {
-  const existing = safeSessionStorageGet("current_lead_id");
-  if (existing) return existing;
-
-  const created = createLeadId();
-  safeSessionStorageSet("current_lead_id", created);
-  return created;
-}
-
-function normalizeLocationText(value: unknown) {
-  return String(value || "")
-    .normalize("NFC")
-    .replace(/[<>{}\[\]\\|"`]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 80);
-}
-
-async function fetchLocationJson(url: string, timeoutMs: number) {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      cache: "no-store",
-      signal: controller.signal,
-    });
-
-    if (!response.ok) return null;
-    return (await response.json()) as Record<string, unknown>;
-  } catch {
-    return null;
-  } finally {
-    window.clearTimeout(timeout);
-  }
-}
-
-function getGeoCountryCode(data: Record<string, unknown>) {
-  const raw = normalizeLocationText(
-    data.country_code || data.countryCode || data.country || data.country_code_iso3,
-  ).toUpperCase();
-
-  if (["BRA", "BRASIL", "BRAZIL"].includes(raw)) return "BR";
-  return raw.slice(0, 2);
-}
-
-function getGeoNetworkText(data: Record<string, unknown>) {
-  const connection = data.connection && typeof data.connection === "object"
-    ? (data.connection as Record<string, unknown>)
-    : {};
-
-  return [
-    data.org,
-    data.asn,
-    data.isp,
-    data.organization,
-    data.network,
-    data.domain,
-    connection.org,
-    connection.isp,
-    connection.asn,
-    connection.domain,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-function isSuspiciousGeo(data: Record<string, unknown>) {
-  const security = data.security && typeof data.security === "object"
-    ? (data.security as Record<string, unknown>)
-    : {};
-
-  const hasSecurityFlag = ["vpn", "proxy", "tor", "relay", "hosting", "anonymous"].some(
-    (key) => security[key] === true,
-  );
-
-  if (hasSecurityFlag) return true;
-
-  const networkText = getGeoNetworkText(data);
-  return [
-    "vpn",
-    "proxy",
-    "tor",
-    "hosting",
-    "host",
-    "datacenter",
-    "data center",
-    "cloud",
-    "cloudflare",
-    "warp",
-    "amazon",
-    "aws",
-    "google",
-    "microsoft",
-    "azure",
-    "oracle",
-    "digitalocean",
-    "hetzner",
-    "ovh",
-    "contabo",
-    "vultr",
-    "linode",
-    "akamai",
-    "leaseweb",
-    "m247",
-    "alibaba",
-    "tencent",
-  ].some((hint) => networkText.includes(hint));
-}
-
-function isBrazilTrustedGeo(data: Record<string, unknown>) {
-  const country = getGeoCountryCode(data);
-
-  // Se a origem parece fora do Brasil ou rede de VPN/datacenter, nao usamos cidade.
-  // O lead continua entrando no funil, mas os textos caem no fallback "sua regi?o".
-  if (country && country !== "BR") return false;
-  if (isSuspiciousGeo(data)) return false;
-  return true;
-}
-
-async function getVisitorLocation() {
-  const empty = { cidade: "", estado: "", localizacao: "", country_code: "", geo_suspicious: false };
-
-  const providers = [
-    {
-      url: "https://ipwho.is/",
-      timeout: 700,
-      map: (data: Record<string, unknown>) => ({
-        cidade: normalizeLocationText(data.city),
-        estado: normalizeLocationText(data.region_code || data.region),
-      }),
-    },
-    {
-      url: "https://ipapi.co/json/",
-      timeout: 900,
-      map: (data: Record<string, unknown>) => ({
-        cidade: normalizeLocationText(data.city),
-        estado: normalizeLocationText(data.region_code || data.region),
-      }),
-    },
-  ];
-
-  for (const provider of providers) {
-    const data = await fetchLocationJson(provider.url, provider.timeout);
-    if (!data || data.success === false || data.error) continue;
-
-    const countryCode = getGeoCountryCode(data);
-    const geoSuspicious = isSuspiciousGeo(data);
-
-    if (!isBrazilTrustedGeo(data)) {
-      return { ...empty, country_code: countryCode, geo_suspicious: geoSuspicious };
-    }
-
-    const { cidade, estado } = provider.map(data);
-    const localizacao = cidade && estado ? `${cidade} - ${estado}` : cidade || estado || "";
-
-    if (cidade || estado) {
-      return { cidade, estado, localizacao, country_code: countryCode, geo_suspicious: false };
-    }
-  }
-
-  return empty;
-}
-
-function postLeadTracking(payload: Record<string, unknown>) {
-  const body = JSON.stringify(payload);
-  const fetchJson = () =>
-    fetch(TRACK_LEAD_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-      keepalive: true,
-    })
-      .then(() => true)
-      .catch(() => false);
-
-  if (typeof navigator.sendBeacon === "function") {
-    const sent = navigator.sendBeacon(
-      TRACK_LEAD_URL,
-      new Blob([body], { type: "text/plain;charset=UTF-8" }),
-    );
-
-    if (sent) {
-      // Compatibilidade: o beacon ajuda no mobile; o fetch JSON mantem suporte se a API antiga ainda estiver no ar.
-      void fetchJson();
-      return Promise.resolve(true);
-    }
-  }
-
-  return fetchJson();
-}
-
-function keepPixelBeaconImage(image: HTMLImageElement) {
-  window.__pixelBeaconImages = window.__pixelBeaconImages || [];
-  window.__pixelBeaconImages.push(image);
-
-  return () => {
-    window.__pixelBeaconImages = (window.__pixelBeaconImages || []).filter((item) => item !== image);
-  };
-}
-
-function sendMetaPixelBeacon(
-  pixelId: string,
-  eventName: string,
-  payload: Record<string, unknown>,
-  eventId: string,
-) {
-  if (!pixelId) return Promise.resolve();
-
-  const url = new URL("https://www.facebook.com/tr/");
-  url.searchParams.set("id", pixelId);
-  url.searchParams.set("ev", eventName);
-  url.searchParams.set("dl", window.location.href);
-  url.searchParams.set("rl", document.referrer || "");
-  url.searchParams.set("if", "false");
-  url.searchParams.set("ts", String(Date.now()));
-  url.searchParams.set("eid", eventId);
-
-  Object.entries(payload).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === "") return;
-    url.searchParams.set(`cd[${key}]`, String(value));
-  });
-
-  return new Promise<void>((resolve) => {
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      resolve();
-    };
-
-    const image = new Image();
-    const releaseImage = keepPixelBeaconImage(image);
-    const requestUrl = url.toString();
-    image.onload = () => { releaseImage(); finish(); };
-    image.onerror = () => { releaseImage(); finish(); };
-    image.src = requestUrl;
-
-    // Garante que o redirecionamento nao fique preso se o Facebook demorar.
-    window.setTimeout(() => { releaseImage(); finish(); }, 1200);
-  });
-}
-
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -467,20 +121,17 @@ function Index() {
     const consultButton = document.getElementById("botao-consultor") as HTMLAnchorElement | null;
     const ctaButtons = [accessButton, consultButton].filter(Boolean) as HTMLAnchorElement[];
     const isMobile = isMobileOrTablet();
-    const leadId = getVisitLeadId();
-    const redirectUrl = buildTelegramUrl(leadId);
-    const visitorLocationPromise = getVisitorLocation();
 
     ctaButtons.forEach((button) => {
       if (isMobile) {
         // Mobile: mantem link externo.
-        button.setAttribute("href", redirectUrl);
+        button.setAttribute("href", CTA_URL);
 
         // Se clicar antes do redirecionamento automatico, aplica o mesmo delay de 1.5s.
         const onMobileClick = (event: MouseEvent) => {
           event.preventDefault();
           window.setTimeout(() => {
-            window.location.href = redirectUrl;
+            window.location.href = CTA_URL;
           }, REDIRECT_DELAY_MS);
         };
 
@@ -492,19 +143,17 @@ function Index() {
       }
     });
 
+    const leadId = createLeadId();
     loadMetaPixel(META_PIXEL_ID);
     const params = new URLSearchParams(window.location.search);
-    const fbclid = cleanClickId(params.get("fbclid"));
-    const clickIds = readClickIds(params);
-    const initialMetaCookies = ensureMetaCookies(fbclid);
-    const fbc = initialMetaCookies.fbc;
-    const fbp = initialMetaCookies.fbp;
+    const fbclid = params.get("fbclid") || "";
+    const fbc = getCookie("_fbc") || buildFbc(fbclid);
+    const fbp = getCookie("_fbp") || "";
     const tracking = {
       leadId,
       fbclid,
       fbc,
       fbp,
-      ...clickIds,
       utm_source: params.get("utm_source") || "",
       utm_medium: params.get("utm_medium") || "",
       utm_campaign: params.get("utm_campaign") || "",
@@ -514,20 +163,15 @@ function Index() {
       ts: Date.now(),
     };
 
-    const pageViewPayload = {
-      lead_id: leadId,
-      source: tracking.utm_source || "direct",
-      campaign: tracking.utm_campaign || "",
-    };
-    const pageViewEventId = `pv_${leadId}`;
-
-    const mobilePageViewBeacon = isMobile
-      ? sendMetaPixelBeacon(META_PIXEL_ID, "PageView", pageViewPayload, pageViewEventId)
-      : Promise.resolve();
-
-    if (!isMobile) {
-      trackMetaEvent("PageView", pageViewPayload, pageViewEventId);
-    }
+    trackMetaEvent(
+      "PageView",
+      {
+        lead_id: leadId,
+        source: tracking.utm_source || "direct",
+        campaign: tracking.utm_campaign || "",
+      },
+      `pv_${leadId}`,
+    );
 
     if (!isMobile) {
       return () => {
@@ -540,108 +184,56 @@ function Index() {
       };
     }
 
-    safeLocalStorageSet("last_lead_id", leadId);
-    safeLocalStorageSet("lead_tracking", JSON.stringify(tracking));
+    window.localStorage.setItem("last_lead_id", leadId);
+    window.localStorage.setItem("lead_tracking", JSON.stringify(tracking));
 
-    const leadPayload = {
-      lead_id: leadId,
-      destination: "telegram",
-      source: tracking.utm_source || "direct",
-      campaign: tracking.utm_campaign || "",
-      content: tracking.utm_content || "",
-    };
-
-    const mobileLeadBeacon = sendMetaPixelBeacon(META_PIXEL_ID, "Lead", leadPayload, leadId);
-
-    const baseTrackingPayload = {
-      bot_id: BOT_ID,
-      lead_id: tracking.leadId,
-      fbclid: tracking.fbclid,
-      fbc: tracking.fbc,
-      fbp: tracking.fbp,
-      ttclid: tracking.ttclid,
-      kwai_click_id: tracking.kwai_click_id,
-      gclid: tracking.gclid,
-      gbraid: tracking.gbraid,
-      wbraid: tracking.wbraid,
-      msclkid: tracking.msclkid,
-      utm_source: tracking.utm_source,
-      utm_medium: tracking.utm_medium,
-      utm_campaign: tracking.utm_campaign,
-      utm_content: tracking.utm_content,
-      utm_term: tracking.utm_term,
-      event_source_url: tracking.event_source_url,
-      user_agent: navigator.userAgent || "",
-    };
-
-    const postLeadPromise = postLeadTracking(baseTrackingPayload);
-
-    const refreshedCookiesPromise = waitForMetaCookies(fbclid).then((fresh) => {
-      if (!fresh.fbp && !fresh.fbc) return false;
-      if (fresh.fbp === baseTrackingPayload.fbp && fresh.fbc === baseTrackingPayload.fbc) return false;
-      safeLocalStorageSet("lead_tracking", JSON.stringify({
-        ...tracking,
-        fbc: fresh.fbc || baseTrackingPayload.fbc,
-        fbp: fresh.fbp || baseTrackingPayload.fbp,
-      }));
-      return postLeadTracking({
-        ...baseTrackingPayload,
-        fbc: fresh.fbc || baseTrackingPayload.fbc,
-        fbp: fresh.fbp || baseTrackingPayload.fbp,
-      });
-    });
-
-    void visitorLocationPromise.then((location) => {
-      if (!location.cidade && !location.estado && !location.localizacao) return;
-
-      const trackingWithLocation = {
-        ...tracking,
-        cidade: location.cidade,
-        estado: location.estado,
-        localizacao: location.localizacao,
-      };
-
-      safeLocalStorageSet("lead_tracking", JSON.stringify(trackingWithLocation));
-
-      const freshMeta = ensureMetaCookies(fbclid);
-
-      void postLeadTracking({
-        ...baseTrackingPayload,
-        fbc: freshMeta.fbc || baseTrackingPayload.fbc,
-        fbp: freshMeta.fbp || baseTrackingPayload.fbp,
-        cidade: location.cidade,
-        estado: location.estado,
-        localizacao: location.localizacao,
-        country_code: location.country_code,
-        geo_suspicious: location.geo_suspicious,
-      });
-    });
+    const postLeadPromise = fetch(TRACK_LEAD_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bot_id: BOT_ID,
+        lead_id: tracking.leadId,
+        fbclid: tracking.fbclid,
+        fbc: tracking.fbc,
+        fbp: tracking.fbp,
+        utm_source: tracking.utm_source,
+        utm_medium: tracking.utm_medium,
+        utm_campaign: tracking.utm_campaign,
+        utm_content: tracking.utm_content,
+        utm_term: tracking.utm_term,
+        event_source_url: tracking.event_source_url,
+      }),
+      keepalive: true,
+    }).catch(() => null);
 
     const postLeadWithTimeout = Promise.race([
       postLeadPromise,
       new Promise((resolve) => setTimeout(resolve, 700)),
     ]);
 
-    const refreshedCookiesWithTimeout = Promise.race([
-      refreshedCookiesPromise,
-      new Promise((resolve) => setTimeout(resolve, 1800)),
-    ]);
+    trackMetaEvent(
+      "Lead",
+      {
+        lead_id: leadId,
+        destination: "telegram",
+        source: tracking.utm_source || "direct",
+        campaign: tracking.utm_campaign || "",
+        content: tracking.utm_content || "",
+      },
+      leadId,
+    );
 
+    const redirectUrl = buildTelegramUrl(leadId);
     let cancelled = false;
 
     const redirectAfterTracking = async () => {
-      try {
-        await Promise.all([
-          postLeadWithTimeout,
-          mobilePageViewBeacon,
-          mobileLeadBeacon,
-          refreshedCookiesWithTimeout,
-          wait(REDIRECT_DELAY_MS),
-        ]);
-      } finally {
-        if (!cancelled) {
-          window.location.replace(redirectUrl);
-        }
+      await Promise.all([
+        postLeadWithTimeout,
+        new Promise((resolve) => setTimeout(resolve, REDIRECT_DELAY_MS)),
+      ]);
+
+      if (!cancelled) {
+        window.location.replace(redirectUrl);
       }
     };
 
